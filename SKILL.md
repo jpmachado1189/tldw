@@ -50,6 +50,8 @@ Process every pending unit. Read its actual source segments and optional precedi
 - Worked examples and visual dependencies.
 - Speaker attribution only where the source establishes it; do not guess identities from voices.
 
+Chapter titles are navigation hints; determine the actual topic from the source. Follow a procedure or worked example across adjacent units before presenting it as complete.
+
 Write the unit's evidence record to a local JSON file and submit it before continuing:
 
 ```text

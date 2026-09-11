@@ -4,6 +4,8 @@ Every CLI command emits JSON on stdout. Exit 0 means the command succeeded; exit
 
 The run contains versioned `run.json`, an immutable normalized `transcript.json`, preserved `original.json`, per-unit evidence, optional media/visuals, the output map, and validation results. Source hash checks prevent silent in-place changes. Re-preparing changed source/configuration creates a separate run; identical input reuses existing progress. `resume` returns compact status and the next pending unit; it does not silently rerun network calls. Use `status --details` or read `run.json` for the full visual ledger before extending it. Frame commands return sheet/manifest paths and counts; read their saved manifest for individual frame paths and actual dimensions.
 
+YouTube may alternate original-language metadata labels such as `en-US` and `en` for the same captions. Preparation recognizes these equivalent labels, including in older checkpoints, while preserving the exact selected track, requested language, source text, and processing configuration. It retains the existing directory and original metadata provenance. If several equivalent runs already contain analysis, use `resume --run-dir` to choose the intended checkpoint; preparation will not merge or overwrite their evidence.
+
 ## Evidence record
 
 Use the exact segment IDs from `read --unit`. Context-only segments do not belong to this unit. Evidence timestamps must lie inside the unit and overlap cited source segments. Save a JSON file like:

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-to-skill"
-version = "0.1.0"
+version = "0.1.1"
 description = "Free, resumable YouTube evidence extraction for portable Agent Skills."
 requires-python = ">=3.10"
 license = "MIT"

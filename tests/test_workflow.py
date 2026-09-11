@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from ytskill import captions, retrieval, runs, validation
-from ytskill.common import Problem, atomic_json, read_json, video_id
+from ytskill.common import Problem, atomic_json, digest, read_json, video_id
 
 
 VIDEO = "AbCdEfGh123"
@@ -128,6 +128,59 @@ def test_resume_and_configuration_identity(tmp_path):
     changed = supplied(tmp_path, budget=500)
     assert changed != directory
     assert runs.status(changed)["pending"]
+
+
+def test_language_alias_resumes_legacy_analysis_not_empty_duplicate(tmp_path, monkeypatch):
+    # A real four-hour video alternated these metadata labels between requests.
+    info = {"id": VIDEO, "duration": 600, "title": "Same recording", "language": "en-US",
+            "automatic_captions": {"en-orig": [{"ext": "json3"}]}}
+    text = json.dumps([{"start": t, "end": t + 10, "text": "A source condition."} for t in range(0, 600, 10)])
+    monkeypatch.setattr(retrieval, "inspect", lambda _: dict(info))
+    monkeypatch.setattr(retrieval, "fetch_track", lambda *args: (text, "json"))
+
+    def old_identity(identity, raw, selection, metadata, config):
+        return digest({"video_id": identity, "transcript": raw, "selection": selection, "metadata": metadata, "config": config})
+
+    with monkeypatch.context() as previous_version:
+        previous_version.setattr(runs, "source_identity", old_identity)
+        directory = Path(runs.prepare(VIDEO, tmp_path / "runs")["run_dir"])
+        acknowledge(directory, tmp_path)
+        before = {p.name: p.read_bytes() for p in (directory / "evidence").glob("*.json")}
+        info["language"] = "en"
+        empty_duplicate = Path(runs.prepare(VIDEO, tmp_path / "runs")["run_dir"])
+        assert empty_duplicate != directory
+        assert runs.status(empty_duplicate)["processed"] == 0
+
+    resumed = runs.prepare(VIDEO, tmp_path / "runs")
+    assert Path(resumed["run_dir"]) == directory
+    assert resumed["pending"] == []
+    assert before == {p.name: p.read_bytes() for p in (directory / "evidence").glob("*.json")}
+    assert runs.load(directory)["metadata"]["language"] == "en-US"
+
+    # Actual source changes still get an independent checkpoint.
+    text = text.replace("A source condition.", "A changed source condition.")
+    changed = runs.prepare(VIDEO, tmp_path / "runs")
+    assert Path(changed["run_dir"]) not in {directory, empty_duplicate}
+    assert changed["processed"] == 0
+
+
+def test_equivalent_runs_with_conflicting_progress_require_explicit_resume(tmp_path):
+    import shutil
+    directory = supplied(tmp_path)
+    acknowledge(directory, tmp_path)
+    other = directory.parent / f"{VIDEO}-legacy-copy"
+    shutil.copytree(directory, other)
+    with pytest.raises(Problem) as caught:
+        supplied(tmp_path)
+    assert caught.value.code == "ambiguous_resume"
+    assert runs.status(directory)["pending"] == runs.status(other)["pending"] == []
+
+
+def test_selected_caption_track_is_not_collapsed_by_original_language_alias():
+    base = {"id": VIDEO, "duration": 10, "language": "en-US"}
+    track = {"language": "en-US", "original_language": "en-US", "method": "yt-dlp"}
+    assert runs.source_identity(VIDEO, [], track, base, {}) != runs.source_identity(VIDEO, [], {**track, "language": "en-GB"}, base, {})
+    assert runs.source_identity(VIDEO, [], track, base, {"language": "en-US"}) != runs.source_identity(VIDEO, [], track, base, {"language": "en-GB"})
 
 
 def test_source_tamper_rejected(tmp_path):

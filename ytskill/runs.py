@@ -12,6 +12,40 @@ SCHEMA = 1
 DISPOSITIONS = {"incorporated", "redundant", "non_instructional", "unresolved"}
 
 
+def source_identity(identity, raw, selection, metadata, config):
+    # YouTube can alternate e.g. en-US/en for identical original captions.
+    # The exact selected track and requested language remain part of the key;
+    # only descriptive original-language labels use their primary language.
+    metadata, selection = dict(metadata), dict(selection)
+    for value, field in [(metadata, "language"), (selection, "original_language")]:
+        if value.get(field):
+            value[field] = value[field].lower().replace("_", "-").split("-")[0]
+    return digest({"video_id": identity, "transcript": raw, "selection": selection, "metadata": metadata, "config": config})
+
+
+def compatible_run(work: Path, identity: str, key: str) -> Path | None:
+    # Recompute keys for legacy runs as well. Keep their existing directories,
+    # evidence IDs, metadata provenance, and media rather than moving files.
+    matches = []
+    for path in sorted(work.glob(f"{identity}-*/run.json")):
+        directory = path.parent
+        saved = load(directory)
+        if saved["video_id"] != identity or not (directory / "original.json").is_file():
+            continue
+        original = read_json(directory / "original.json")
+        raw = captions.parse(original["content"], original["format"])
+        if source_identity(identity, raw, saved["selection"], saved["metadata"], saved["config"]) == key:
+            source(directory)  # Do not resume a modified normalized transcript.
+            matches.append(directory)
+    progressed = [p for p in matches if any((p / "evidence").glob("*.json")) or load(p)["visuals"]["reviews"] or (p / "output-map.json").exists()]
+    if len(progressed) > 1:
+        raise Problem("ambiguous_resume", "Several equivalent runs contain analysis. Use resume --run-dir with the intended checkpoint; no evidence was merged or overwritten.")
+    if progressed:
+        return progressed[0]
+    # An earlier empty run can still contain expensive downloaded media.
+    return max(matches, key=lambda p: (any((p / "media").glob("*.download.json")), p.name == f"{identity}-{key[:12]}")) if matches else None
+
+
 def load(directory: Path) -> dict:
     run = read_json(directory / "run.json")
     if run.get("schema_version") != SCHEMA:
@@ -97,7 +131,10 @@ def prepare(url: str, work: Path, *, transcript: Path | None = None, metadata: P
     meta = retrieval.public_metadata(info) if info else {"id": identity, "url": canonical_url(identity), "title": identity, "channel": "unknown", "duration": max(x["end"] for x in raw), "description": "", "chapters": [], "language": language, "available_tracks": [], "duration_inferred": True}
     if any(x["start"] > meta["duration"] + 1 or x["end"] > meta["duration"] + 5 for x in raw):
         raise Problem("invalid_timestamp", "Caption times exceed the verified video duration. Correct the source or metadata before continuing.")
-    key = digest({"video_id": identity, "transcript": raw, "selection": selection, "metadata": meta, "config": config})
+    key = source_identity(identity, raw, selection, meta, config)
+    existing_directory = compatible_run(work, identity, key)
+    if existing_directory:
+        return status(existing_directory)
     directory = work / f"{identity}-{key[:12]}"
     if (directory / "run.json").exists():
         existing = load(directory)
