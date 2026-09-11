@@ -14,7 +14,13 @@ RULES = {
     "role_control": re.compile(r"<\s*/?system\b|<\|im_start\|>|\[INST\]|<\s*/?tool_call\b|^\s*(?:system|developer)\s*:", re.I | re.M),
     "authority_grant": re.compile(r"^\s*(?:allowed-tools|permissions|bypass_permissions|disable_sandbox)\s*:", re.I | re.M),
     "hidden_control": re.compile(r"[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\U000e0000-\U000e007f]"),
-    "possible_exfiltration": re.compile(r"(?:curl|wget|upload|send|https?://).{0,160}(?:api[_ -]?key|credential|\.env\b|secret)", re.I),
+    # Match words, including underscore-delimited secret variable names, rather
+    # than innocent substrings such as "sender" and "secretary".
+    "possible_exfiltration": re.compile(
+        r"(?:\b(?:curl|wget|upload(?:s|ed|ing)?|send(?:s|ing)?)\b|https?://)"
+        r".{0,160}(?:(?<![^\W_])(?:api[_ -]?keys?|credentials?|secrets?)(?![^\W_])|\.env\b)",
+        re.I,
+    ),
 }
 LINK = re.compile(r"!?\[[^\]]*\]\((<[^>]+>|[^)]+)\)")
 
