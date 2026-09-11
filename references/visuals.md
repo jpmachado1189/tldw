@@ -14,7 +14,7 @@ Inspect every returned sheet in small batches; contact sheets show where to look
 PYTHON SKILL_ROOT/scripts/youtube_to_skill.py frames --run-dir RUN_DIRECTORY --start 120 --end 150 --every 2 --detail
 ```
 
-Detail mode downloads up to 1080p when available. Request smaller time intervals when actions are rapid. Each request is capped at 120 frames. Inspect full-size individual images for exact code, equations, settings, or table entries. Pair before/after frames when the meaning depends on a change. OCR can be arranged locally by the host if useful, but is never required and its output must be checked against images.
+Detail mode downloads up to 1080p when available. With `--media`, it uses that file's actual resolution: a preview cannot become high resolution by requesting detail. The manifest records actual width/height separately from requested maximum width; do not infer resolution from the filename suffix. Request smaller time intervals when actions are rapid. Each request is capped at 120 frames. Inspect full-size individual images for exact code, equations, settings, or table entries. Pair before/after frames when the meaning depends on a change. OCR can be arranged locally by the host if useful, but is never required and its output must be checked against images.
 
 For a user-supplied accessible video file:
 

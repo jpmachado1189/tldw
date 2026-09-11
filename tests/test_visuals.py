@@ -57,6 +57,7 @@ def test_ffmpeg_extracts_synthetic_visual_only_instruction(tmp_path):
     directory = supplied(tmp_path, [{"start": 0, "end": 4, "text": "Use the setting shown on screen."}], duration=4)
     result = frames(directory, media=video, start=0, end=4, every=2)
     assert len(result["frames"]) == 2
+    assert all(x["width"] == 640 and x["height"] == 360 for x in result["frames"])
     assert result["contact_sheets"]
     assert result["status"] == "extracted_not_reviewed"
     assert runs.load(directory)["visuals"]["capability"] == "unknown"

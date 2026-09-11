@@ -205,7 +205,7 @@ def record(directory: Path, evidence: Path) -> dict:
     return status(directory)
 
 
-def status(directory: Path) -> dict:
+def status(directory: Path, *, details=False) -> dict:
     run = load(directory)
     pending, processed, unresolved = [], [], []
     for unit in run["units"]:
@@ -217,7 +217,8 @@ def status(directory: Path) -> dict:
             processed.append(unit["id"])
             if item.get("disposition") == "unresolved" or item.get("unresolved"):
                 unresolved.append(unit["id"])
-    return {"run_dir": str(directory.resolve()), "video_id": run["video_id"], "phase": run["phase"], "units_total": len(run["units"]), "processed": len(processed), "pending": pending, "unresolved": unresolved, "caption_gaps": run["gaps"], "visuals": run["visuals"], "transcription": run["transcription"], "metadata_inferred": (run.get("metadata") or {}).get("duration_inferred", False), "next_unit": pending[0] if pending else None}
+    visuals = run["visuals"] if details else {"capability": run["visuals"]["capability"], "reviewed_intervals": len(run["visuals"]["reviews"]), "levels": dict(Counter(x["level"] for x in run["visuals"]["reviews"])), "limitation": run["visuals"].get("limitation")}
+    return {"run_dir": str(directory.resolve()), "video_id": run["video_id"], "phase": run["phase"], "units_total": len(run["units"]), "processed": len(processed), "pending": pending, "unresolved": unresolved, "caption_gaps": run["gaps"], "visuals": visuals, "transcription": run["transcription"], "metadata_inferred": (run.get("metadata") or {}).get("duration_inferred", False), "next_unit": pending[0] if pending else None}
 
 
 def consent(directory: Path, choice: str) -> dict:

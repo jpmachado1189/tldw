@@ -2,7 +2,7 @@
 
 Every CLI command emits JSON on stdout. Exit 0 means the command succeeded; exit 2 means invalid input, a failed stage, awaiting source, or incomplete validation. Diagnostic setup output goes to stderr. Do not treat a nonzero prepare result as a lost run: it can include a usable `run_dir`.
 
-The run contains versioned `run.json`, an immutable normalized `transcript.json`, preserved `original.json`, per-unit evidence, optional media/visuals, the output map, and validation results. Source hash checks prevent silent in-place changes. Re-preparing changed source/configuration creates a separate run; identical input reuses existing progress. `resume` returns status and the next pending unit; it does not silently rerun network calls.
+The run contains versioned `run.json`, an immutable normalized `transcript.json`, preserved `original.json`, per-unit evidence, optional media/visuals, the output map, and validation results. Source hash checks prevent silent in-place changes. Re-preparing changed source/configuration creates a separate run; identical input reuses existing progress. `resume` returns compact status and the next pending unit; it does not silently rerun network calls. Use `status --details` or read `run.json` for the full visual ledger before extending it. Frame commands return sheet/manifest paths and counts; read their saved manifest for individual frame paths and actual dimensions.
 
 ## Evidence record
 

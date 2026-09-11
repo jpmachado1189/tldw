@@ -104,7 +104,9 @@ def frames(directory: Path, *, media: Path | None = None, overview=False, start=
                 failures.append(time)
                 continue
             temporary.replace(destination)
-        images.append({"time": time, "file": destination.relative_to(directory).as_posix()})
+        with Image.open(destination) as im:
+            actual_width, actual_height = im.size
+        images.append({"time": time, "file": destination.relative_to(directory).as_posix(), "width": actual_width, "height": actual_height, "requested_max_width": width})
     sheets = []
     font = ImageFont.load_default(size=17)
     request_key = digest({"times": times, "width": width})[:10]

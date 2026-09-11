@@ -40,6 +40,7 @@ Observed results:
 - Three application exercises covered an incompatible-dependency handoff, intentionally shared packages with local-only export, and PowerShell/interpreter/deletion boundaries. Nine source conditions were checked. These were plan/artifact exercises; source commands and destructive operations were not executed.
 - The evaluator retained the late-video `--system-site-packages` and `pip --local` qualifications and corrected caption-distorted commands using actual screen images.
 - The evaluator identified excessive JSON overhead in source reads. Future unit sizing now budgets for row metadata/serialization overhead and emits compact read JSON; a regression test checks this behavior. Existing evidence IDs remain stable when resuming earlier runs.
+- The evaluator also found repetitive status output and ambiguous detail-image filenames. Status now summarizes the visual ledger (`--details` retrieves it), frame commands return compact manifest/sheet references, and manifests report actual pixel dimensions separately from the requested maximum.
 
 This was an independent agent's generation/application test, not a controlled benchmark against a no-skill baseline. Raw transcripts, images, generated tutorial output, and evaluator working notes remain outside the public repository.
 

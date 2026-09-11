@@ -31,7 +31,9 @@ def parser():
     for name in ["status", "resume", "read", "record", "review", "consent", "frames", "audio", "map", "validate"]:
         command = sub.add_parser(name)
         command.add_argument("--run-dir", type=Path, required=True)
-        if name == "read":
+        if name in {"status", "resume"}:
+            command.add_argument("--details", action="store_true")
+        elif name == "read":
             command.add_argument("--unit")
             command.add_argument("--start", type=float)
             command.add_argument("--end", type=float)
@@ -81,7 +83,7 @@ def dispatch(args):
         return runs.prepare(args.url, args.work_dir, transcript=args.transcript, metadata=args.metadata, language=args.language, budget=args.unit_tokens, transcription_method=args.transcription_method, consent_run=args.consent_run)
     directory = args.run_dir.resolve()
     if command in {"status", "resume"}:
-        return runs.status(directory)
+        return runs.status(directory, details=args.details)
     if command == "read":
         if args.unit:
             return runs.read_unit(directory, args.unit)
@@ -98,7 +100,9 @@ def dispatch(args):
         if not importlib.util.find_spec("PIL"):
             raise Problem("missing_dependency", "Set up Pillow and FFmpeg with bootstrap --visual before frame extraction.")
         from .visuals import frames
-        return frames(directory, media=args.media, overview=args.overview, start=args.start, end=args.end, every=args.every, detail=args.detail, scene_detection=not args.no_scenes)
+        result = frames(directory, media=args.media, overview=args.overview, start=args.start, end=args.end, every=args.every, detail=args.detail, scene_detection=not args.no_scenes)
+        result["frame_count"] = len(result.pop("frames"))
+        return result
     if command == "audio":
         run = runs.load(directory)
         if run["transcription"]["consent"] != "granted":
