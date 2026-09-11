@@ -36,7 +36,17 @@ Use the exact segment IDs from `read --unit`. Context-only segments do not belon
 }
 ```
 
-The sample is a schema illustration, not video evidence. `claim`, timestamps, and `source_segment_ids` are required on each evidence item; other fields are added when the source supports them. Keep numerical thresholds, exact names, corrections, and worked examples. Do not fill empty fields with invented knowledge.
+The sample is a schema illustration, not video evidence. `claim` and timestamps are required on each evidence item. Cite `source_segment_ids`, `source_frames`, or both; other fields are added when the source supports them. Keep numerical thresholds, exact names, corrections, and worked examples. Do not fill empty fields with invented knowledge.
+
+For a teaching point recovered from an image, use the exact file and absolute video time from the extraction manifest:
+
+```json
+{"claim":"The demonstrated setting must be off before export.","start":120,"end":125,"source_frames":[{"file":"visuals/MEDIA_ID/frame-0000120000-1920.jpg","time":120,"observation":"The visible export dialog shows the blue switch in the off position."}]}
+```
+
+This is a schema example, not source evidence. Each frame must exist in this video's manifest at that time, lie within the evidence/unit interval, and appear in the inspected-frame review ledger before validation passes. Merely pointing to an arbitrary image or relabeling its timestamp is rejected. Use a sequence of before/after frames for an action that cannot be established by a single still.
+
+`visual-unit --run-dir RUN_DIRECTORY --start 120 --end 150` adds an idempotent visual interval (at most five minutes) to a caption-based run when no existing unit covers the teaching. These units have `kind: visual` and empty `segment_ids`; they require their own evidence and output-map disposition. For a fully visual path, `prepare URL --work-dir WORK_DIRECTORY --visual-only` creates five-minute units spanning verified video duration. It does not invent or verify speech. Caption gaps in a mixed run remain unresolved until actually assessed; visual evidence does not silently excuse missing speech.
 
 Disposition values: `incorporated`, `redundant`, `non_instructional`, `unresolved`. Redundant and non-instructional records still list all owned segments and a meaningful reason. An unresolved list blocks a completed result even if other parts of the unit are useful. Updating a record atomically replaces that unit's previous notes; read them first so corrections do not erase useful evidence.
 

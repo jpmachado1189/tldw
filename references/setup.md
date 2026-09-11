@@ -5,7 +5,7 @@ The converter's Python orchestration uses only the standard library. It can be r
 Prefer an already working environment. Otherwise:
 
 ```text
-PYTHON SKILL_ROOT/scripts/youtube_to_skill.py bootstrap --env-dir LOCAL_ENV_DIRECTORY --visual
+PYTHON SKILL_ROOT/scripts/tldw.py bootstrap --env-dir LOCAL_ENV_DIRECTORY --visual
 ```
 
 Use the returned Python executable for subsequent commands. The helper installs `yt-dlp[default]`, `youtube-transcript-api`, Pillow, and imageio-ffmpeg in that environment. It does not install ASR models. Pillow builds contact sheets; imageio-ffmpeg supplies a platform wheel with an FFmpeg executable when no system FFmpeg exists. Availability varies by platform; on unsupported architectures the host should obtain FFmpeg through the platform's supported distribution.

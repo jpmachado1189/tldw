@@ -1,4 +1,4 @@
 interface:
-  display_name: "YouTube to Skill"
+  display_name: "tldw"
   short_description: "Turn video teaching into evidence-backed skills"
-  default_prompt: "Use $youtube-to-skill to turn this YouTube video into an actionable skill with timestamped evidence."
+  default_prompt: "Use $tldw to turn this YouTube video into an actionable skill with timestamped evidence."

@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+import signal
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -100,10 +101,70 @@ def clock(seconds: float) -> str:
     return f"{total // 3600:02d}:{total // 60 % 60:02d}:{total % 60:02d}"
 
 
+def stop_windows_tree(pid: int):
+    # Toolhelp works without taskkill's service/RPC access, which can be denied
+    # in otherwise capable Windows agent sandboxes. Only our PID's descendants
+    # are selected; never terminate unrelated processes by executable name.
+    import ctypes
+    from ctypes import wintypes
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("pid", wintypes.DWORD), ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD), ("parent", wintypes.DWORD), ("priority", wintypes.LONG), ("flags", wintypes.DWORD), ("name", wintypes.WCHAR * 260)]
+    api = ctypes.WinDLL("kernel32", use_last_error=True)
+    api.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    api.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    for name in ["Process32FirstW", "Process32NextW"]:
+        getattr(api, name).argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+        getattr(api, name).restype = wintypes.BOOL
+    api.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    api.OpenProcess.restype = wintypes.HANDLE
+    api.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    api.CloseHandle.argtypes = [wintypes.HANDLE]
+    snapshot = api.CreateToolhelp32Snapshot(2, 0)
+    if snapshot == ctypes.c_void_p(-1).value:
+        return
+    children = {}
+    try:
+        entry = Entry()
+        entry.dwSize = ctypes.sizeof(entry)
+        found = api.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            children.setdefault(entry.parent, []).append(entry.pid)
+            found = api.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        api.CloseHandle(snapshot)
+    order, seen = [pid], {pid}
+    for parent in order:
+        for child in children.get(parent, []):
+            if child not in seen:
+                order.append(child)
+                seen.add(child)
+    for target in reversed(order):
+        handle = api.OpenProcess(1, False, target)
+        if handle:
+            try:
+                api.TerminateProcess(handle, 1)
+            finally:
+                api.CloseHandle(handle)
+
+
 def execute(argv: list[str], *, timeout=120, env=None) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, env=env)
-    except subprocess.TimeoutExpired as exc:
-        raise Problem("timeout", "Utility timed out; completed checkpoints are retained.") from exc
+        process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", env=env, start_new_session=os.name != "nt", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            # yt-dlp may own an FFmpeg child. Kill only our utility's process
+            # tree, so a timed-out section cannot keep downloading in hiding.
+            if os.name == "nt":
+                stop_windows_tree(process.pid)
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.kill()
+            process.communicate()
+            raise Problem("timeout", "Utility timed out; its child processes were stopped and completed checkpoints retained.") from exc
+        return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
     except OSError as exc:
         raise Problem("missing_dependency", f"Cannot run {Path(argv[0]).name}: {type(exc).__name__}") from exc

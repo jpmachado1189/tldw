@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .common import Problem, atomic_json, confined, finite, read_json, tokens, video_id
-from .runs import integrity, source, validate_record
+from .runs import frame_catalog, integrity, source, validate_record
 
 
 RULES = {
@@ -125,6 +125,8 @@ def validate(directory: Path, output: Path, *, accept_findings: Path | None = No
         if tokens(master.read_text(encoding="utf-8-sig")) > 4000:
             limitations.append("Entrypoint exceeds 4,000 estimated tokens; move details into references.")
     records = {}
+    extracted_frames = frame_catalog(directory, run)
+    reviewed_frames = {f for r in run["visuals"]["reviews"] if r["level"] in {"sampled", "close"} for f in r.get("frame_files", [])}
     for unit in run["units"]:
         path = directory / "evidence" / f"{unit['id']}.json"
         if not path.is_file():
@@ -132,7 +134,11 @@ def validate(directory: Path, output: Path, *, accept_findings: Path | None = No
             continue
         record = read_json(path)
         records[unit["id"]] = record
-        errors.extend(f"{unit['id']}: {e}" for e in validate_record(run, transcript, record))
+        errors.extend(f"{unit['id']}: {e}" for e in validate_record(run, transcript, record, frames=extracted_frames))
+        for item in record.get("evidence", []):
+            for frame in item.get("source_frames", []):
+                if isinstance(frame, dict) and frame.get("file") not in reviewed_frames:
+                    errors.append(f"{unit['id']}: Cited visual evidence is absent from the inspected-frame ledger.")
         if record.get("disposition") == "unresolved" or record.get("unresolved"):
             errors.append(f"Unresolved source evidence: {unit['id']}")
     mapping_file = directory / "output-map.json"
@@ -162,6 +168,10 @@ def validate(directory: Path, output: Path, *, accept_findings: Path | None = No
         if gap["status"] == "unresolved":
             errors.append(f"Unresolved caption gap: {gap['id']}")
     visual = run["visuals"]
+    if run.get("config", {}).get("source_mode") == "visual_only":
+        limitations.append("Visual-only source: spoken/audio content was not transcribed or verified. The skill covers inspected on-screen teaching only.")
+        if visual["capability"] != "available":
+            errors.append("Visual-only processing requires actual image inspection.")
     if visual["capability"] == "unknown":
         errors.append("Visual capability and review coverage have not been recorded.")
     elif visual["capability"] == "unavailable":

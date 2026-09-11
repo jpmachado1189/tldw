@@ -1,4 +1,4 @@
-# YouTube to Skill
+# tldw
 
 Turn a YouTube tutorial, lecture, or workshop into an Agent Skill that can **apply its teaching**: procedures, decision rules, worked examples, and troubleshooting, backed by timestamps.
 
@@ -6,27 +6,29 @@ Free extraction. No API key. Your existing agent does the synthesis. Built for t
 
 ## Use it
 
-Install this repository as an Agent Skill using your harness's skill installer, or copy the repository into a discoverable `youtube-to-skill` skill folder. For hosts supported by the Skills CLI:
+Install this repository as an Agent Skill using your harness's skill installer, or copy the repository into a discoverable `tldw` skill folder. For hosts supported by the Skills CLI:
 
 ```sh
-npx skills add https://github.com/jpmachado1189/youtube-to-skill --skill youtube-to-skill
+npx skills add https://github.com/jpmachado1189/tldw --skill tldw
 ```
 
 Then ask your agent:
 
 ```text
-Use youtube-to-skill to turn https://www.youtube.com/watch?v=VIDEO_ID
+Use tldw to turn https://www.youtube.com/watch?v=VIDEO_ID
 into a skill I can use to apply its teaching. Save it in ./my-new-skill.
 ```
 
 The agent handles lightweight utility setup when necessary and permitted. You do not need to configure a model account or GPU. The normal path retrieves existing captions and uses your agent's image capabilities to inspect selected frames.
 
-If captions are unavailable, the skill explains why and offers free local transcription. **It waits for consent before downloading transcription models or processing audio that way.** Your agent then selects and configures a suitable local tool and continues. Declining leaves a resumable run. A timed transcript you provide also works.
+The visual path uses cached preview frames and bounded detail requests. On-screen teaching can be recorded directly against inspected frames without a caption anchor. An explicitly selected visual-only run can process silent demonstrations; it discloses that audio was not verified.
+
+When captions are unavailable and spoken teaching is needed, a timed transcript you provide or optional free local transcription can recover it. **The skill waits for consent before downloading transcription models or processing audio that way.** The normal caption-and-visual path requires no transcription model.
 
 ## What happens
 
 1. **Retrieve:** metadata, original-language captions where identifiable, and timestamped source text.
-2. **Inspect:** regular/scene/chapter/cue samples across the duration, then closer review of demonstrations, diagrams, slides, and code.
+2. **Inspect:** regular/scene/chapter/cue samples across the duration, then closer review of demonstrations, diagrams, slides, and code. Detail downloads request short clips; if the server cannot provide a usable section, one cached full detail file is reused. Returned media is decoded before accepting a detail download.
 3. **Extract teaching:** bounded reading units, evidence records, qualifications, examples, and failure modes.
 4. **Build:** a compact skill entry point and task-oriented references with source links.
 5. **Verify:** segment ownership, processing records, output mapping, timestamps, file links, suspicious instructions, and a host-run application exercise.
@@ -50,16 +52,19 @@ See [VALIDATION.md](VALIDATION.md) for actual tested coverage and remaining limi
 From a checkout, using a suitable interpreter:
 
 ```sh
-python scripts/youtube_to_skill.py doctor
-python scripts/youtube_to_skill.py bootstrap --env-dir /path/outside/repo/tools --visual
+python scripts/tldw.py doctor
+python scripts/tldw.py bootstrap --env-dir /path/outside/repo/tools --visual
 # Use the interpreter returned by bootstrap for subsequent calls.
-python scripts/youtube_to_skill.py prepare 'YOUTUBE_URL' --work-dir /path/outside/repo/runs
-python scripts/youtube_to_skill.py resume --run-dir RUN_DIRECTORY
-python scripts/youtube_to_skill.py read --run-dir RUN_DIRECTORY --unit u0001
-python scripts/youtube_to_skill.py frames --run-dir RUN_DIRECTORY --overview
+python scripts/tldw.py prepare 'YOUTUBE_URL' --work-dir /path/outside/repo/runs
+python scripts/tldw.py resume --run-dir RUN_DIRECTORY
+python scripts/tldw.py read --run-dir RUN_DIRECTORY --unit u0001
+python scripts/tldw.py frames --run-dir RUN_DIRECTORY --overview
+python scripts/tldw.py frames --run-dir RUN_DIRECTORY --start 120 --end 140 --every 2 --detail
 ```
 
 The CLI extracts and tracks evidence. It deliberately does not call a model or generate skill prose automatically. The host follows [SKILL.md](SKILL.md), records its analysis, writes the generated skill, and runs validation. All helper commands return JSON; errors/incomplete work use exit code 2. [Evidence and interfaces](references/evidence.md).
+
+For standalone on-screen evidence outside existing transcript units, use `visual-unit --run-dir RUN_DIRECTORY --start 120 --end 150`. For an explicitly visual-only source, use `prepare URL --work-dir WORK_DIRECTORY --visual-only`. The previous `scripts/youtube_to_skill.py` entry point remains a compatibility wrapper.
 
 ## Development
 

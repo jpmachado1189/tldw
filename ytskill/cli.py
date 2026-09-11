@@ -28,7 +28,8 @@ def parser():
     prep.add_argument("--unit-tokens", type=int, default=3000)
     prep.add_argument("--transcription-method")
     prep.add_argument("--consent-run", type=Path)
-    for name in ["status", "resume", "read", "record", "review", "consent", "frames", "audio", "map", "validate"]:
+    prep.add_argument("--visual-only", action="store_true", help="Analyze on-screen teaching without captions; audio remains explicitly unverified.")
+    for name in ["status", "resume", "read", "record", "review", "consent", "frames", "visual-unit", "audio", "map", "validate"]:
         command = sub.add_parser(name)
         command.add_argument("--run-dir", type=Path, required=True)
         if name in {"status", "resume"}:
@@ -49,6 +50,9 @@ def parser():
             command.add_argument("--every", type=float, default=5)
             command.add_argument("--detail", action="store_true")
             command.add_argument("--no-scenes", action="store_true")
+        elif name == "visual-unit":
+            command.add_argument("--start", type=float, required=True)
+            command.add_argument("--end", type=float, required=True)
         elif name == "validate":
             command.add_argument("--output", type=Path, required=True)
             command.add_argument("--accept-findings", type=Path)
@@ -80,7 +84,7 @@ def dispatch(args):
     if command == "bootstrap":
         return bootstrap(args.env_dir, args.visual)
     if command == "prepare":
-        return runs.prepare(args.url, args.work_dir, transcript=args.transcript, metadata=args.metadata, language=args.language, budget=args.unit_tokens, transcription_method=args.transcription_method, consent_run=args.consent_run)
+        return runs.prepare(args.url, args.work_dir, transcript=args.transcript, metadata=args.metadata, language=args.language, budget=args.unit_tokens, transcription_method=args.transcription_method, consent_run=args.consent_run, visual_only=args.visual_only)
     directory = args.run_dir.resolve()
     if command in {"status", "resume"}:
         return runs.status(directory, details=args.details)
@@ -92,6 +96,8 @@ def dispatch(args):
         raise Problem("invalid_read", "Use --unit or both --start and --end.")
     if command == "record":
         return runs.record(directory, args.file)
+    if command == "visual-unit":
+        return runs.add_visual_unit(directory, args.start, args.end)
     if command == "review":
         return runs.review(directory, args.file)
     if command == "consent":

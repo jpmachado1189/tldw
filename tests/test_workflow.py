@@ -340,3 +340,18 @@ def test_readonly_resume_does_not_request_network(tmp_path, monkeypatch):
     directory = supplied(tmp_path)
     monkeypatch.setattr(retrieval, "inspect", lambda _: pytest.fail("Resume must not retrieve again"))
     assert runs.status(directory)["next_unit"] == "u0001"
+
+
+def test_utility_timeout_stops_its_child_process(tmp_path):
+    import time
+    from ytskill.common import execute
+    child = tmp_path / "child.py"
+    ready, leaked = tmp_path / "ready", tmp_path / "leaked"
+    child.write_text("import time,sys\nfrom pathlib import Path\nPath(sys.argv[1]).write_text('ready')\ntime.sleep(2)\nPath(sys.argv[2]).write_text('should not run')\n", encoding="utf-8")
+    parent = tmp_path / "parent.py"
+    parent.write_text("import subprocess,sys,time\nsubprocess.Popen([sys.executable,sys.argv[1],sys.argv[2],sys.argv[3]])\ntime.sleep(60)\n", encoding="utf-8")
+    with pytest.raises(Problem) as caught:
+        execute([sys.executable, str(parent), str(child), str(ready), str(leaked)], timeout=1)
+    assert caught.value.code == "timeout" and ready.exists()
+    time.sleep(1.2)
+    assert not leaked.exists()

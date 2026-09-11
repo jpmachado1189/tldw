@@ -1,6 +1,6 @@
 # Validation record
 
-Date: 2026-09-11. Version: 0.1.1. The converter is portable by design; the complete interactive workflow was verified first in Codex on Windows. Other harnesses require their own behavioral verification.
+Date: 2026-09-11. Version: 0.2.0, renamed to tldw. The converter is portable by design; the complete interactive workflow was verified first in Codex on Windows. Other harnesses require their own behavioral verification.
 
 ## Automated checks
 
@@ -15,13 +15,17 @@ The offline pytest suite covers:
 - Real FFmpeg extraction/contact-sheet creation from a synthetic visual-only instruction.
 - Missing/unresolved evidence, caption gaps, incomplete visual ledgers, malformed metadata, broken file/heading links, invalid timestamps, and nested suspicious instructions.
 
-Local result: **55 tests passed**, Ruff passed, and the Codex skill-creator validator passed. An editable package install and the helper's own `bootstrap --visual` operation into a fresh isolated environment also succeeded. No ASR model was installed.
+Local result: **62 tests passed**, Ruff passed, and the Codex skill-creator validator passed. Earlier checks also verified an editable package install and the helper's `bootstrap --visual` operation into a fresh isolated environment. No ASR model was installed.
 
 Run `python -m pytest -q` and `python -m ruff check .` from the checkout. CI runs the offline suite on Windows, Ubuntu, and macOS with Python 3.10 and 3.12. CI status is separate from behavioral harness support.
 
 ## Live extraction checks
 
 Raw test material remains local, outside this repository.
+
+Version 0.2.0 adds tested visual-only timeline units, direct inspected-frame evidence without fake caption anchors, registered timestamp validation, and a completion gate requiring cited frames to appear in the visual review ledger. Synthetic silent-video tests use actual FFmpeg media and verify that audio limits remain explicit. Other tests exercise five-hour visual timeline coverage, idempotent supplemental units, clip-local to source-absolute timestamps, cached section downloads, invalid/empty sections, and timeout cleanup of utility child processes.
+
+A live ten-second section from the Nick Saraev course at 03:24:55 produced a 1,351,109-byte H.264 clip and two readable 1920x1080 frames at the correct absolute times. The initial HLS section had returned an empty MP4 despite a zero exit code; detail extraction now prefers direct HTTP formats, validates decoded frames, and has a cached-full-file fallback. Successful section retrieval was live-tested; the fallback behavior is covered by deterministic tests, not claimed as a completed live full-detail download.
 
 | Source | Observed result |
 |---|---|

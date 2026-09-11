@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import sys
+import re
 from pathlib import Path
 
 from .common import Problem, canonical_url, execute, finite, read_json
@@ -201,8 +202,8 @@ def download_media(identity: str, directory: Path, kind="preview") -> Path:
         candidate = directory / saved.get("filename", "")
         if saved.get("video_id") == identity and candidate.is_file() and candidate.resolve().parent == directory.resolve() and candidate.stat().st_size == saved.get("bytes"):
             return candidate
-    selector = "bestaudio/best" if kind == "audio" else "bestvideo[height<=480]/best[height<=480]/worst" if kind == "preview" else "bestvideo[height<=1080]/best[height<=1080]/best"
-    result = ytdlp(["--no-simulate", "-f", selector, "-o", str(directory / f"{kind}.%(ext)s"), "--print", "after_move:filepath", "--", canonical_url(identity)], timeout=7200)
+    selector = "bestaudio/best" if kind == "audio" else "bestvideo[height<=480][protocol=https]/bestvideo[height<=480]/best[height<=480]/worst" if kind == "preview" else "bestvideo[height<=1080][protocol=https]/bestvideo[height<=1080]/best[height<=1080]/best"
+    result = ytdlp(["--no-simulate", "--abort-on-unavailable-fragments", "--fragment-retries", "1", "-f", selector, "-o", str(directory / f"{kind}.%(ext)s"), "--print", "after_move:filepath", "--", canonical_url(identity)], timeout=7200)
     paths = [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
     if not paths or not paths[-1].is_file() or paths[-1].suffix == ".part" or paths[-1].resolve().parent != directory.resolve():
         raise Problem("incomplete_download", "Media download did not produce a verified completed file.")
@@ -210,3 +211,56 @@ def download_media(identity: str, directory: Path, kind="preview") -> Path:
     path = paths[-1]
     atomic_json(marker, {"video_id": identity, "kind": kind, "filename": path.name, "bytes": path.stat().st_size})
     return path
+
+
+def video_has_frame(path: Path, time=0) -> bool:
+    """An empty MP4 can be reported as a successful download; actually decode it."""
+    try:
+        result = execute([ffmpeg(), "-hide_banner", "-nostdin", "-ss", str(time), "-i", str(path), "-map", "0:v:0", "-vf", "showinfo", "-frames:v", "1", "-f", "null", "-"], timeout=30)
+        return result.returncode == 0 and bool(re.search(r"\bn:\s*0\b", result.stderr))
+    except Problem:
+        return False
+
+
+def download_detail_clip(identity: str, directory: Path, start, end) -> tuple[Path, float]:
+    """Request only a bounded high-resolution interval; keep absolute offset outside the clip."""
+    from .common import atomic_json, digest
+    start, end = finite(start), finite(end)
+    if end <= start or end - start > 300:
+        raise Problem("invalid_range", "Request a high-resolution interval of at most five minutes.")
+    directory.mkdir(parents=True, exist_ok=True)
+    key = digest({"video_id": identity, "start": start, "end": end, "height": 1080, "cuts": "direct-reencode-v2"})[:16]
+    marker = directory / f"detail-{key}.download.json"
+    failed_cached_clip = False
+    if marker.exists():
+        saved = read_json(marker)
+        candidate = directory / saved.get("filename", "")
+        if saved.get("video_id") == identity and saved.get("start") == start and saved.get("end") == end and candidate.is_file() and candidate.resolve().parent == directory.resolve() and candidate.stat().st_size == saved.get("bytes"):
+            offset = saved.get("timeline_offset", start)
+            if video_has_frame(candidate, max(0, start - offset)) and video_has_frame(candidate, max(0, end - offset - .2)):
+                return candidate, offset
+            failed_cached_clip = True
+    fallback_marker = directory / "detail-section-fallback.json"
+    fallback = read_json(fallback_marker) if fallback_marker.exists() else {}
+    fallback_reason = "Previously unusable section download." if failed_cached_clip else "Server/format section download failed."
+    if not failed_cached_clip and fallback.get("video_id") != identity:
+        try:
+            result = ytdlp(["--no-simulate", "--ffmpeg-location", ffmpeg(), "--download-sections", f"*{start}-{end}", "--force-keyframes-at-cuts", "-f", "bestvideo[height<=1080][protocol=https][vcodec^=avc]/bestvideo[height<=1080][protocol=https]/bestvideo[height<=1080]/best", "-o", str(directory / f"detail-{key}.%(ext)s"), "--print", "after_move:filepath", "--", canonical_url(identity)], timeout=120)
+            paths = [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+            if paths and paths[-1].is_file() and paths[-1].suffix != ".part" and paths[-1].resolve().parent == directory.resolve():
+                path = paths[-1]
+                if video_has_frame(path) and video_has_frame(path, max(0, end - start - .2)):
+                    atomic_json(marker, {"video_id": identity, "start": start, "end": end, "timeline_offset": start, "mode": "section", "filename": path.name, "bytes": path.stat().st_size})
+                    return path, start
+        except Problem as exc:
+            if exc.code in {"restricted_video", "access_blocked", "missing_dependency"}:
+                raise
+            fallback_reason = f"Section retrieval failed: {exc.code}."
+    # Some YouTube formats return an empty section with exit code zero. Fall
+    # back once to a reusable full detail file instead of repeating bad seeks.
+    path = download_media(identity, directory, "detail")
+    if not video_has_frame(path, start) or not video_has_frame(path, max(start, end - .2)):
+        raise Problem("incomplete_download", "Neither the section nor cached full detail media contains decodable frames at the requested times.")
+    atomic_json(fallback_marker, {"video_id": identity, "reason": fallback_reason, "mode": "cached_full_video"})
+    atomic_json(marker, {"video_id": identity, "start": start, "end": end, "timeline_offset": 0, "mode": "cached_full_video", "reason": fallback_reason, "filename": path.name, "bytes": path.stat().st_size})
+    return path, 0.0

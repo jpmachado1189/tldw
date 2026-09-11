@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "youtube-to-skill"
-version = "0.1.1"
+name = "tldw"
+version = "0.2.0"
 description = "Free, resumable YouTube evidence extraction for portable Agent Skills."
 requires-python = ">=3.10"
 license = "MIT"
@@ -17,7 +17,7 @@ visual = ["pillow>=10.1", "imageio-ffmpeg>=0.6,<1"]
 test = ["pytest>=8", "ruff>=0.11", "pyyaml>=6"]
 
 [project.scripts]
-youtube-to-skill = "ytskill.cli:main"
+tldw = "ytskill.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ytskill"]

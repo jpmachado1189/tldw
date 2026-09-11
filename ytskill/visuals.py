@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from .common import Problem, atomic_json, clock, digest, execute, finite, read_json
-from .retrieval import download_media, ffmpeg
+from .retrieval import download_detail_clip, download_media, ffmpeg
 from .runs import load
 
 
@@ -59,13 +59,25 @@ def frames(directory: Path, *, media: Path | None = None, overview=False, start=
     duration = finite(run["metadata"]["duration"])
     if duration <= 0:
         raise Problem("invalid_duration", "Video duration must be positive.")
+    offset = 0.0
+    if detail and overview:
+        raise Problem("invalid_mode", "Use a low-resolution overview first, then request bounded detail intervals.")
+    if not overview:
+        start, end, every = finite(start), finite(end if end is not None else min(start + 60, duration)), finite(every)
+        if end <= start or end > duration + .1 or every <= 0 or (end - start) / every > 120:
+            raise Problem("invalid_range", "Frame range must fit the video, use a positive interval, and request at most 120 frames. Split larger requests.")
     if media:
         media = media.resolve(strict=True)
         if not media.is_file():
             raise Problem("missing_media", "Supply a readable media file.")
+    elif detail:
+        media, offset = download_detail_clip(run["video_id"], directory / "media", start, min(end, duration))
     else:
-        media = download_media(run["video_id"], directory / "media", "detail" if detail else "preview")
-    identity = digest({"path": str(media), "size": media.stat().st_size, "mtime": media.stat().st_mtime_ns})[:12]
+        media = download_media(run["video_id"], directory / "media", "preview")
+    identity_data = {"path": str(media), "size": media.stat().st_size, "mtime": media.stat().st_mtime_ns}
+    if offset:
+        identity_data["timeline_offset"] = offset
+    identity = digest(identity_data)[:12]
     scene_dir = directory / "visuals" / identity
     scene_dir.mkdir(parents=True, exist_ok=True)
     if overview:
@@ -93,7 +105,7 @@ def frames(directory: Path, *, media: Path | None = None, overview=False, start=
                 pass
         if not valid:
             temporary = destination.with_suffix(".pending.jpg")
-            result = execute([ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", str(time), "-i", str(media), "-frames:v", "1", "-vf", f"scale='min({width},iw)':-2", "-q:v", "2", str(temporary)], timeout=120)
+            result = execute([ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", str(max(0, time - offset)), "-i", str(media), "-frames:v", "1", "-vf", f"scale='min({width},iw)':-2", "-q:v", "2", str(temporary)], timeout=120)
             if result.returncode or not temporary.exists():
                 failures.append(time)
                 continue
@@ -110,8 +122,8 @@ def frames(directory: Path, *, media: Path | None = None, overview=False, start=
     sheets = []
     font = ImageFont.load_default(size=17)
     request_key = digest({"times": times, "width": width})[:10]
-    for offset in range(0, len(images), 12):
-        batch = images[offset:offset + 12]
+    for sheet_offset in range(0, len(images), 12):
+        batch = images[sheet_offset:sheet_offset + 12]
         sheet = Image.new("RGB", (1280, math.ceil(len(batch) / 4) * 210), "#151515")
         draw = ImageDraw.Draw(sheet)
         for index, entry in enumerate(batch):
@@ -120,10 +132,10 @@ def frames(directory: Path, *, media: Path | None = None, overview=False, start=
                 im.thumbnail((318, 180))
                 sheet.paste(im, (x, y))
             draw.text((x + 5, y + 185), clock(entry["time"]), fill="white", font=font)
-        path = scene_dir / f"sheet-{request_key}-{offset // 12 + 1:03d}.jpg"
+        path = scene_dir / f"sheet-{request_key}-{sheet_offset // 12 + 1:03d}.jpg"
         sheet.save(path, quality=90)
         sheets.append(path.relative_to(directory).as_posix())
-    manifest = {"schema_version": 1, "video_id": run["video_id"], "sampling": sampling, "frames": images, "contact_sheets": sheets, "failed_timestamps": failures,
+    manifest = {"schema_version": 1, "video_id": run["video_id"], "sampling": sampling, "timeline_offset": offset, "frames": images, "contact_sheets": sheets, "failed_timestamps": failures,
                 "status": "extracted_not_reviewed", "next": "The host must inspect these images, expand teaching-heavy intervals, and record reviews. Extraction does not count as visual understanding."}
     manifest_path = scene_dir / f"manifest-{request_key}.json"
     atomic_json(manifest_path, manifest)
