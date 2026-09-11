@@ -1,0 +1,4 @@
+interface:
+  display_name: "YouTube to Skill"
+  short_description: "Turn video teaching into evidence-backed skills"
+  default_prompt: "Use $youtube-to-skill to turn this YouTube video into an actionable skill with timestamped evidence."
